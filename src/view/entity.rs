@@ -17,18 +17,20 @@ use crate::{Result, Terminal, TerminalEvent, Transport};
 /// repaints itself when output arrives and sizes the terminal to whatever
 /// bounds it is laid out in; the host does neither.
 pub struct TerminalView<T> {
-    pub(super) terminal: Terminal<T>,
-    pub(super) focus:    FocusHandle,
-    pub(super) style:    TerminalStyle,
+    pub(super) terminal:         Terminal<T>,
+    pub(super) focus:            FocusHandle,
+    pub(super) style:            TerminalStyle,
     /// Measured for `style`, on the first render after it changed. Input
     /// handlers read it too, which is sound: an event only reaches the view
     /// after a frame has drawn it, and that frame measured.
-    pub(super) metrics:  Option<CellMetrics>,
+    pub(super) metrics:          Option<CellMetrics>,
     /// Where the grid's top-left corner was last laid out, in window
     /// coordinates, for turning a mouse position into a cell.
-    pub(super) origin:   Point<Pixels>,
-    exit_reported:       bool,
-    _pump:               Task<()>,
+    pub(super) origin:           Point<Pixels>,
+    /// Scrolling that hasn't yet added up to a whole line (see `on_scroll`).
+    pub(super) scroll_remainder: f32,
+    exit_reported:               bool,
+    _pump:                       Task<()>,
 }
 
 impl<T: Transport> TerminalView<T> {
@@ -48,6 +50,7 @@ impl<T: Transport> TerminalView<T> {
                style,
                metrics: None,
                origin: Point::default(),
+               scroll_remainder: 0.,
                exit_reported: false,
                _pump: pump }
     }

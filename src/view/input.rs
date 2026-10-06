@@ -36,6 +36,7 @@ impl<T: Transport> TerminalView<T> {
         };
         let bracketed = self.terminal.with_grid(|grid| grid.bracketed_paste_mode());
         if let Some(payload) = paste_payload(&text, bracketed) {
+            self.return_to_live_screen(cx);
             let written = self.terminal.write(payload.as_bytes());
             self.report(written, cx);
         }
@@ -59,8 +60,17 @@ impl<T: Transport> TerminalView<T> {
                                control:  keystroke.modifiers.control,
                                alt:      keystroke.modifiers.alt, };
         if let Some(bytes) = key_to_bytes(input) {
+            self.return_to_live_screen(cx);
             let written = self.terminal.write(&bytes);
             self.report(written, cx);
+        }
+    }
+
+    /// Scrolls back to the live screen before input goes to the program, as
+    /// terminals do: what is typed shows where it lands.
+    fn return_to_live_screen(&mut self, cx: &mut Context<Self>) {
+        if self.terminal.with_grid_mut(|grid| grid.scroll_to_bottom()) {
+            cx.notify();
         }
     }
 
@@ -98,8 +108,9 @@ impl<T: Transport> TerminalView<T> {
         }
     }
 
-    /// One wheel report per scroll event, in the direction scrolled. Sent
-    /// only to a mouse-aware program; there is no scrollback view yet.
+    /// A mouse-aware program gets one wheel report per scroll event, in the
+    /// direction scrolled. Otherwise the wheel scrolls the view through the
+    /// scrollback, by the lines scrolled - see [`Self::whole_lines`].
     pub(super) fn on_scroll(&mut self, event: &ScrollWheelEvent, _window: &mut Window,
                             cx: &mut Context<Self>) {
         let Some(metrics) = self.metrics
@@ -110,16 +121,42 @@ impl<T: Transport> TerminalView<T> {
             ScrollDelta::Lines(delta) => delta.y,
             ScrollDelta::Pixels(delta) => metrics.pixels_to_lines(delta.y),
         };
+        if lines == 0. {
+            return;
+        }
+        if !self.terminal.with_grid(|grid| grid.sgr_mouse_mode()) {
+            // Up the wheel is back into the scrollback.
+            let rows = self.whole_lines(lines);
+            if rows != 0
+               && self.terminal
+                      .with_grid_mut(|grid| grid.scroll_display(rows))
+            {
+                cx.notify();
+            }
+            return;
+        }
         let button = if lines > 0. {
             MouseButton::WheelUp
         }
-        else if lines < 0. {
-            MouseButton::WheelDown
-        }
         else {
-            return;
+            MouseButton::WheelDown
         };
         self.mouse_button(event.position, button, true, cx);
+    }
+
+    /// The whole lines `lines` more of scrolling adds up to, keeping the
+    /// fraction for the next event. A trackpad reports a few pixels at a
+    /// time - a fraction of a line each - so rounding each event up to a line
+    /// would scroll many times too fast. Turning back starts afresh, so a
+    /// fraction left going one way doesn't eat into the other.
+    fn whole_lines(&mut self, lines: f32) -> i32 {
+        if self.scroll_remainder != 0. && self.scroll_remainder.signum() != lines.signum() {
+            self.scroll_remainder = 0.;
+        }
+        self.scroll_remainder += lines;
+        let whole = self.scroll_remainder.trunc();
+        self.scroll_remainder -= whole;
+        whole as i32
     }
 
     /// Sends a button to a program that turned on SGR mouse reporting.
