@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Rows were shorter than their text, so lines overlapped. A cell's height
+  added the font's descent as the platform reported it, and macOS reports
+  it negative, giving ascent minus descent (about 58% of the line at 13px).
+  It is now ascent plus the descent's size, rounded up to a whole pixel.
+
 ## [0.2.0] - 2026-10-06
 
 ### Added
