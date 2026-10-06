@@ -27,7 +27,10 @@ release-only and only ever receives `release/*` and `hotfix/*` merges.
    `clippy`, and `test` on macOS and Linux, with the `pty` feature both on and
    off.
 4. PRs merge with a merge commit or rebase - never squash - so Conventional
-   Commit prefixes survive in history.
+   Commit prefixes survive in history. Delete a merged feature branch at merge
+   time (`gh pr merge --merge --delete-branch`). The repo's "Automatically
+   delete head branches" setting stays off: it deleted `master` when a
+   back-merge PR used it as the head branch.
 
 ## Running checks locally
 
@@ -85,7 +88,8 @@ Consumers pin a tag, so a release is a signed tag on `master`:
    `git tag -s vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`.
    The rulesets cover branches only, so tag pushes are not gated.
 3. Merge `master` back into `develop` through a PR, so the version bump and
-   changelog reach the integration branch.
+   changelog reach the integration branch. `master` is that PR's head branch:
+   merge it without `--delete-branch`.
 4. Bump the `tag` in each consumer's `Cargo.toml` in its own PR.
 
 A fix that cannot wait for `develop` goes on `hotfix/x.y.z` from `master`,

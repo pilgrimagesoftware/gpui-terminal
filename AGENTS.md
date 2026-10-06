@@ -72,6 +72,10 @@ build(deps): bump alacritty_terminal to 0.27
   the primary checkout.
 - Merge with a merge commit or rebase, never squash - the Conventional Commit
   prefixes are the changelog's raw material.
+- Delete merged feature branches with `gh pr merge --delete-branch`, never on
+  a `master` -> `develop` back-merge. Do not turn on the repo's "Automatically
+  delete head branches" setting: it deleted `master` on the v0.2.0 back-merge,
+  and the branch rulesets' no-deletion rule did not stop it.
 - Releases are signed tags on `master` after a `release/x.y.z` PR (version +
   changelog bump), followed by a `master` -> `develop` merge-back; see
   `CONTRIBUTING.md` - Releases. Consumers then bump their `tag` pin.
