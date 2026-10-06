@@ -23,6 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   belongs to the program. The platform modifier's `c` and `v` still do
   everywhere.
 
+### Fixed
+
+- A focused terminal now takes its keystrokes ahead of the app's key
+  bindings, through a keystroke interceptor, so a binding on the focus path
+  can't take a key meant for the program: gpui-component's Root binds Tab and
+  Shift-Tab (focus cycling) and, off macOS, Ctrl-C (copy). Platform chords
+  other than copy and paste still go to the app.
+- Shift-Tab sends back-tab (`ESC [ Z`). `KeyInput` gains `shift`.
+
 ### Changed
 
 - Once the program has exited, the view sends no more input - keys, pastes

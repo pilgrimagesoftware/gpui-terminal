@@ -271,3 +271,49 @@ fn after_exit_the_mouse_goes_to_the_view_not_the_program(cx: &mut TestAppContext
                live,
                "the wheel scrolled the history instead");
 }
+
+gpui_kit::actions!(terminal_view_test, [Hijack, AppChord]);
+
+/// The app's key bindings - bound with no context, so they match anywhere -
+/// don't take the program's keys from a focused terminal: Tab and Ctrl-C go
+/// to the program. An app chord still reaches the app.
+#[gpui_kit::test]
+fn a_focused_terminal_takes_its_keys_ahead_of_the_apps_bindings(cx: &mut TestAppContext) {
+    let (harness, mut cx) = harness(cx);
+    let hijacked = Arc::new(Mutex::new(0usize));
+    let chords = Arc::new(Mutex::new(0usize));
+    cx.update(|_, cx| {
+          cx.bind_keys([gpui_kit::KeyBinding::new("tab", Hijack, None),
+                        gpui_kit::KeyBinding::new("shift-tab", Hijack, None),
+                        gpui_kit::KeyBinding::new("ctrl-c", Hijack, None),
+                        gpui_kit::KeyBinding::new("cmd-k", AppChord, None)]);
+          let hijacked = Arc::clone(&hijacked);
+          cx.on_action(move |_: &Hijack, _| *hijacked.lock() += 1);
+          let chords = Arc::clone(&chords);
+          cx.on_action(move |_: &AppChord, _| *chords.lock() += 1);
+      });
+    cx.update(|window, cx| harness.view.focus_handle(cx).focus(window, cx));
+
+    cx.simulate_keystrokes("tab shift-tab ctrl-c cmd-k");
+
+    assert_eq!(harness.log.lock().written, b"\t\x1b[Z\x03");
+    assert_eq!(*hijacked.lock(), 0, "no binding took a program's key");
+    assert_eq!(*chords.lock(), 1, "the app's chord reached the app");
+}
+
+/// Unfocused, the terminal takes nothing: the app's bindings work as usual.
+#[gpui_kit::test]
+fn an_unfocused_terminal_leaves_keys_to_the_app(cx: &mut TestAppContext) {
+    let (harness, mut cx) = harness(cx);
+    let hijacked = Arc::new(Mutex::new(0usize));
+    cx.update(|_, cx| {
+          cx.bind_keys([gpui_kit::KeyBinding::new("tab", Hijack, None)]);
+          let hijacked = Arc::clone(&hijacked);
+          cx.on_action(move |_: &Hijack, _| *hijacked.lock() += 1);
+      });
+
+    cx.simulate_keystrokes("tab");
+
+    assert!(harness.log.lock().written.is_empty());
+    assert_eq!(*hijacked.lock(), 1);
+}

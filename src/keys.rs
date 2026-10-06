@@ -14,6 +14,9 @@ pub struct KeyInput<'a> {
     pub key_char: Option<&'a str>,
     pub control:  bool,
     pub alt:      bool,
+    /// Shift held: it changes only Tab, to back-tab. For the other keys it
+    /// is already in `key_char` (`"A"` for Shift-A).
+    pub shift:    bool,
 }
 
 /// Returns the bytes to write to a PTY for this key press, or `None` if
@@ -21,6 +24,10 @@ pub struct KeyInput<'a> {
 /// platform ("Cmd") chord this layer doesn't own - the app's own keybinds
 /// handle those before input ever reaches the terminal).
 pub fn key_to_bytes(input: KeyInput<'_>) -> Option<Vec<u8>> {
+    if input.key == "tab" && input.shift {
+        // Back-tab (CBT): what shells and editors read as Shift-Tab.
+        return Some(b"\x1b[Z".to_vec());
+    }
     if let Some(named) = named_key_bytes(input.key) {
         return Some(named);
     }
@@ -111,7 +118,8 @@ mod tests {
         KeyInput { key,
                    key_char: None,
                    control: false,
-                   alt: false }
+                   alt: false,
+                   shift: false }
     }
 
     #[test]
@@ -119,7 +127,8 @@ mod tests {
         let input = KeyInput { key:      "a",
                                key_char: Some("a"),
                                control:  false,
-                               alt:      false, };
+                               alt:      false,
+                               shift:    false, };
         assert_eq!(key_to_bytes(input), Some(b"a".to_vec()));
     }
 
@@ -128,7 +137,8 @@ mod tests {
         let input = KeyInput { key:      "a",
                                key_char: Some("A"),
                                control:  false,
-                               alt:      false, };
+                               alt:      false,
+                               shift:    false, };
         assert_eq!(key_to_bytes(input), Some(b"A".to_vec()));
     }
 
@@ -180,5 +190,13 @@ mod tests {
         let input = KeyInput { key_char: None,
                                ..key("control") };
         assert_eq!(key_to_bytes(input), None);
+    }
+
+    #[test]
+    fn shift_tab_is_back_tab_and_tab_is_tab() {
+        assert_eq!(key_to_bytes(key("tab")), Some(b"\t".to_vec()));
+        let input = KeyInput { shift: true,
+                               ..key("tab") };
+        assert_eq!(key_to_bytes(input), Some(b"\x1b[Z".to_vec()));
     }
 }
