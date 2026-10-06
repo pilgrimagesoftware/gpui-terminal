@@ -1,0 +1,92 @@
+# Contributing to gpui-terminal
+
+`gpui-terminal` is a terminal emulator view for GPUI, embedded by
+[Knot](https://github.com/pilgrimagesoftware/Knot) and
+[Fernrohr](https://github.com/pilgrimagesoftware/Fernrohr). Both consume it as
+a git dependency pinned to a tag, so every change here reaches them through a
+release, never by tracking `main`.
+
+## Before you start
+
+- The Rust toolchain is pinned by `rust-toolchain.toml` (1.98.0, with
+  `rustfmt` and `clippy`). `rustup` picks it up automatically.
+- Formatting uses a pinned nightly `rustfmt`, named by `RUSTFMT_NIGHTLY` in the
+  `Makefile`: `rustup toolchain install $(make -s print-rustfmt-nightly)
+  --profile minimal --component rustfmt`.
+- On Linux, GPUI needs the system libraries listed in the `apt-get install`
+  step of `.github/workflows/ci.yml`.
+
+## Workflow
+
+`main` is the only long-lived branch.
+
+1. Branch from `main`: `feat/<change>`, `fix/<change>`, `chore/<change>`.
+2. Keep commits scoped, conventional and signed (see below).
+3. Open a PR against `main`. CI (`.github/workflows/ci.yml`) must pass: `fmt`,
+   `clippy`, and `test` on macOS and Linux, with the `pty` feature both on and
+   off.
+4. PRs merge with a merge commit or rebase - never squash - so Conventional
+   Commit prefixes survive in history.
+
+## Running checks locally
+
+```bash
+make             # fmt-check + lint + test + build, both feature sets
+
+make fmt         # reformat with the pinned nightly
+make fmt-check   # verify formatting (what CI runs)
+make lint        # clippy -D warnings, pty on and off
+make test
+make build
+```
+
+Run `make fmt` before committing.
+
+## Commit messages
+
+[Conventional Commits](https://www.conventionalcommits.org/), signed. Scope is
+the module touched:
+
+```
+feat(view): scroll the scrollback with the wheel
+fix(grid): keep the selection anchored across a resize
+feat(style): a host palette for the terminal's colours
+build(deps): bump alacritty_terminal to 0.27
+```
+
+## Dependencies
+
+- Everything resolves from crates.io: no `[patch]` sections, no git
+  dependencies. A consumer's build has no way to apply a patch made here.
+- `gpui-kit` is pinned exactly and bumped by hand, in the same change as every
+  consumer's pin. Dependabot ignores it on purpose.
+- MIT only. Nothing copyleft - this crate exists as a separate repo so that
+  AGPL code (Knot) never ends up in it.
+
+## Architecture decisions
+
+Non-trivial design choices get an ADR under `docs/adr/`. Run `/adr "<title>"`
+or copy `docs/adr/0000-template.md`. Index: `docs/adr/README.md`.
+
+## Changelog
+
+User-facing changes go under `## [Unreleased]` in `CHANGELOG.md` in the
+Keep a Changelog format (Added / Changed / Fixed / Removed).
+
+## Releases
+
+Consumers pin a tag, so a release is a tag:
+
+1. In a `chore/release-x.y.z` PR, bump `version` in `Cargo.toml` and move the
+   `[Unreleased]` entries in `CHANGELOG.md` under `## [x.y.z] - <date>`.
+2. After it merges, tag the merge commit on `main` with a signed tag:
+   `git tag -s vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`.
+3. Bump the `tag` in each consumer's `Cargo.toml` in its own PR.
+
+Pre-1.0, a breaking API change bumps the minor version. The crate does not
+publish to crates.io.
+
+## License
+
+By contributing you agree your work is licensed under the MIT license, matching
+the project.

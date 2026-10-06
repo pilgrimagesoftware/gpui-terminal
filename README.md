@@ -112,6 +112,12 @@ crate. Bump this pin in lockstep with the consumers below, in the same change.
 - [Fernrohr](https://github.com/pilgrimagesoftware/Fernrohr) - a GPUI
   Kubernetes client.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md): `make` runs the same checks as CI, and
+releases are signed tags on `main`. Report security issues privately - see
+[SECURITY.md](SECURITY.md).
+
 ## License
 
 MIT - see [LICENSE](LICENSE).
