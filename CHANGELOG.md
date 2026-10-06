@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `TerminalPalette` on `TerminalStyle` (`TerminalStyle::palette`): a host's
+  foreground, background and sixteen ANSI colours, and optional cursor and
+  selection colours (default: swap the cell's colours, as before).
+  `TerminalPalette::rgb` turns a GPUI colour into an entry. The default
+  palette is the previous fixed one.
+
 ## [0.1.0] - 2026-10-05
 
 ### Added

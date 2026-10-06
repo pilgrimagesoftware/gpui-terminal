@@ -9,14 +9,14 @@ use gpui_kit::{
     Styled, Window, canvas, div, px, rgb,
 };
 
-use super::{TerminalView, palette};
-use crate::consts::DEFAULT_BACKGROUND;
+use super::{TerminalPalette, TerminalView, palette};
 use crate::{Grid, Transport};
 
 impl<T: Transport> Render for TerminalView<T> {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let metrics = self.cell_metrics(cx);
-        let rows = self.terminal.with_grid(rows);
+        let colors = self.style.palette;
+        let rows = self.terminal.with_grid(|grid| rows(grid, &colors));
         let view = cx.weak_entity();
         // Covers the pane, to learn the bounds the grid is laid out in.
         let fit = canvas(move |bounds, window, cx| {
@@ -39,7 +39,7 @@ impl<T: Transport> Render for TerminalView<T> {
              // host's theme sets - otherwise the rows drawn and the rows the
              // program was told it has drift apart.
              .line_height(px(metrics.height))
-             .bg(rgb(DEFAULT_BACKGROUND))
+             .bg(rgb(colors.background))
              .on_mouse_down(MouseButton::Left, cx.listener(Self::on_left_down))
              .on_mouse_up(MouseButton::Left, cx.listener(Self::on_left_up))
              .on_mouse_move(cx.listener(Self::on_mouse_move))
@@ -58,14 +58,40 @@ struct Span {
     flags:      Flags,
 }
 
-/// Every visible row, the cursor drawn by swapping its cell's colours.
-fn rows(grid: &Grid) -> Vec<Div> {
+/// Every visible row, in `colors`.
+fn rows(grid: &Grid, colors: &TerminalPalette) -> Vec<Div> {
     let cursor = grid.cursor();
-    (0..grid.size().rows).map(|row| render_row(grid, row, cursor))
+    (0..grid.size().rows).map(|row| render_row(grid, row, cursor, colors))
                          .collect()
 }
 
-fn render_row(grid: &Grid, row: usize, cursor: (usize, usize)) -> Div {
+/// A cell's foreground and background: its own, inverted when it asks to
+/// be; then the cursor's and the selection's - the palette's colour behind
+/// the cell when it sets one, else the cell's colours swapped.
+pub(super) fn cell_colors(foreground: u32, background: u32, inverse: bool, cursor: bool,
+                          selected: bool, colors: &TerminalPalette)
+                          -> (u32, u32) {
+    let (mut foreground, mut background) = if inverse {
+        (background, foreground)
+    }
+    else {
+        (foreground, background)
+    };
+    let mut mark = |active: bool, color: Option<u32>| {
+        if !active {
+            return;
+        }
+        match color {
+            Some(color) => background = color,
+            None => std::mem::swap(&mut foreground, &mut background),
+        }
+    };
+    mark(selected, colors.selection);
+    mark(cursor, colors.cursor);
+    (foreground, background)
+}
+
+fn render_row(grid: &Grid, row: usize, cursor: (usize, usize), colors: &TerminalPalette) -> Div {
     let mut spans: Vec<Span> = Vec::new();
     for (column, cell) in grid.row_cells(row).enumerate() {
         // The second column of a wide character is a placeholder; the glyph
@@ -73,14 +99,12 @@ fn render_row(grid: &Grid, row: usize, cursor: (usize, usize)) -> Div {
         if cell.flags.contains(Flags::WIDE_CHAR_SPACER) {
             continue;
         }
-        let swapped = cell.flags.contains(Flags::INVERSE)
-                      ^ ((column, row) == cursor)
-                      ^ grid.is_selected(column, row);
-        let (mut foreground, mut background) =
-            (palette::resolve(cell.fg, true), palette::resolve(cell.bg, false));
-        if swapped {
-            std::mem::swap(&mut foreground, &mut background);
-        }
+        let (foreground, background) = cell_colors(palette::resolve(cell.fg, true, colors),
+                                                   palette::resolve(cell.bg, false, colors),
+                                                   cell.flags.contains(Flags::INVERSE),
+                                                   (column, row) == cursor,
+                                                   grid.is_selected(column, row),
+                                                   colors);
         match spans.last_mut() {
             Some(span)
                 if span.foreground == foreground
@@ -121,3 +145,6 @@ fn render_span(span: Span) -> Div {
     }
     element
 }
+
+#[cfg(test)]
+mod tests;

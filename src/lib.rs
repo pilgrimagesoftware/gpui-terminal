@@ -56,4 +56,4 @@ pub use pty::{PtyCommand, PtyTransport};
 pub use sink::{ExitHook, OutputHook, TerminalSink};
 pub use terminal::{Terminal, TerminalBuilder};
 pub use transport::{ExitReport, Transport};
-pub use view::{TerminalStyle, TerminalView};
+pub use view::{TerminalPalette, TerminalStyle, TerminalView};
