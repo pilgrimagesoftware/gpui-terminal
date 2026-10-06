@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Checkout only: the token is never used to write anything.
+permissions:
+  contents: read
+
+env:
+  # `rustfmt.toml` turns on `unstable_features` (struct-field alignment),
+  # which only a nightly rustfmt will honor. Pinned rather than "nightly" so
+  # the fmt check can't start failing from an unrelated nightly regression.
+  RUSTFMT_NIGHTLY: nightly-2026-09-21
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pinned nightly rustfmt
+        run: rustup toolchain install "${{ env.RUSTFMT_NIGHTLY }}" --profile minimal --component rustfmt
+
+      - name: Format
+        run: rustup run ${{ env.RUSTFMT_NIGHTLY }} cargo fmt --all --check
+
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies (GPUI)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev \
+            libfontconfig-dev \
+            libwayland-dev \
+            libxkbcommon-x11-dev \
+            libvulkan1 \
+            libgtk-3-dev \
+            mesa-vulkan-drivers
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.98.0"
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Clippy (all features)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Clippy (no default features)
+        run: cargo clippy --no-default-features --all-targets -- -D warnings
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies (GPUI)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev \
+            libfontconfig-dev \
+            libwayland-dev \
+            libxkbcommon-x11-dev \
+            libvulkan1 \
+            libgtk-3-dev \
+            mesa-vulkan-drivers
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.98.0"
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Test (all features)
+        run: cargo test --all-features
+
+      - name: Test (no default features)
+        run: cargo test --no-default-features
