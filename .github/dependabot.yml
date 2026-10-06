@@ -4,8 +4,26 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    target-branch: main
+    open-pull-requests-limit: 10
+    ignore:
+      # Pinned exactly (`=0.7.0`) and bumped by hand in lockstep with every
+      # consumer: two `gpui` versions in one build are two incompatible
+      # `Entity` types, so a bump here alone breaks Knot and Fernrohr.
+      - dependency-name: gpui-kit
+    groups:
+      cargo-minor-patch:
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
+    target-branch: main
+    groups:
+      actions:
+        update-types:
+          - minor
+          - patch
