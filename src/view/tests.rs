@@ -112,3 +112,58 @@ fn typing_in_the_focused_view_writes_to_the_transport(cx: &mut TestAppContext) {
 
     assert_eq!(harness.log.lock().written, b"ls\r");
 }
+
+/// Scrolls the wheel over the view, `lines` up (negative: down).
+fn wheel(cx: &mut VisualTestContext, lines: f32) {
+    use gpui_kit::{ScrollDelta, ScrollWheelEvent, point};
+    cx.simulate_event(ScrollWheelEvent { position: point(px(40.), px(40.)),
+                                         delta: ScrollDelta::Lines(point(0., lines)),
+                                         ..Default::default() });
+    cx.run_until_parked();
+}
+
+fn top_row(harness: &Harness, cx: &mut VisualTestContext) -> String {
+    harness.view.read_with(cx, |view, _| {
+                    view.terminal().with_grid(|grid| grid.row_text(0))
+                })
+}
+
+#[gpui_kit::test]
+fn the_wheel_scrolls_the_scrollback_and_typing_returns_to_the_live_screen(cx: &mut TestAppContext) {
+    let (harness, mut cx) = harness(cx);
+    for line in 0..200 {
+        harness.sink.output(format!("line {line}\r\n").as_bytes());
+    }
+    cx.run_until_parked();
+    cx.update(|window, cx| harness.view.focus_handle(cx).focus(window, cx));
+    let live = top_row(&harness, &mut cx);
+
+    wheel(&mut cx, 3.);
+    let scrolled = top_row(&harness, &mut cx);
+    assert_ne!(scrolled, live, "the view moved back into the scrollback");
+    assert!(harness.log.lock().written.is_empty(),
+            "no wheel report to a program that didn't ask for the mouse");
+
+    cx.simulate_keystrokes("a");
+    assert_eq!(top_row(&harness, &mut cx),
+               live,
+               "typing returns to the live screen");
+    assert_eq!(harness.log.lock().written, b"a");
+}
+
+#[gpui_kit::test]
+fn a_mouse_aware_program_gets_the_wheel_instead(cx: &mut TestAppContext) {
+    let (harness, mut cx) = harness(cx);
+    for line in 0..200 {
+        harness.sink.output(format!("line {line}\r\n").as_bytes());
+    }
+    // SGR mouse reporting on, any-event tracking.
+    harness.sink.output(b"\x1b[?1000h\x1b[?1006h");
+    cx.run_until_parked();
+    let live = top_row(&harness, &mut cx);
+
+    wheel(&mut cx, 3.);
+    assert_eq!(top_row(&harness, &mut cx), live, "the view stays put");
+    assert!(!harness.log.lock().written.is_empty(),
+            "the program got a wheel report");
+}
