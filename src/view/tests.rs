@@ -167,3 +167,58 @@ fn a_mouse_aware_program_gets_the_wheel_instead(cx: &mut TestAppContext) {
     assert!(!harness.log.lock().written.is_empty(),
             "the program got a wheel report");
 }
+
+/// Scrolls a trackpad's `pixels` over the view, up (negative: down).
+fn swipe(cx: &mut VisualTestContext, pixels: f32) {
+    use gpui_kit::{ScrollDelta, ScrollWheelEvent, point};
+    cx.simulate_event(ScrollWheelEvent { position: point(px(40.), px(40.)),
+                                         delta: ScrollDelta::Pixels(point(px(0.), px(pixels))),
+                                         ..Default::default() });
+    cx.run_until_parked();
+}
+
+fn display_offset(harness: &Harness, cx: &mut VisualTestContext) -> usize {
+    harness.view.read_with(cx, |view, _| {
+                    view.terminal().with_grid(|grid| grid.display_offset())
+                })
+}
+
+/// A trackpad's small steps add up: a quarter of a line at a time scrolls
+/// one line per four steps, not one per step - and turning back starts
+/// from nothing rather than spending what was left going up.
+#[gpui_kit::test]
+fn trackpad_pixels_add_up_to_whole_lines(cx: &mut TestAppContext) {
+    let (harness, mut cx) = harness(cx);
+    for line in 0..200 {
+        harness.sink.output(format!("line {line}\r\n").as_bytes());
+    }
+    cx.run_until_parked();
+    let quarter = harness.view
+                         .read_with(&cx, |view, _| view.metrics.expect("measured").height)
+                  / 4.;
+
+    swipe(&mut cx, quarter);
+    swipe(&mut cx, quarter);
+    swipe(&mut cx, quarter);
+    assert_eq!(display_offset(&harness, &mut cx),
+               0,
+               "three quarters: not a line yet");
+    swipe(&mut cx, quarter);
+    assert_eq!(display_offset(&harness, &mut cx),
+               1,
+               "four quarters: one line");
+    for _ in 0..8 {
+        swipe(&mut cx, quarter);
+    }
+    assert_eq!(display_offset(&harness, &mut cx),
+               3,
+               "twelve quarters: three lines");
+
+    swipe(&mut cx, quarter * 3.);
+    swipe(&mut cx, -quarter * 3.);
+    assert_eq!(display_offset(&harness, &mut cx),
+               3,
+               "turning back starts afresh: three quarters down is not a line");
+    swipe(&mut cx, -quarter);
+    assert_eq!(display_offset(&harness, &mut cx), 2);
+}
