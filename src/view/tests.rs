@@ -112,3 +112,25 @@ fn typing_in_the_focused_view_writes_to_the_transport(cx: &mut TestAppContext) {
 
     assert_eq!(harness.log.lock().written, b"ls\r");
 }
+
+#[gpui_kit::test]
+fn after_the_program_exits_keys_and_pastes_go_nowhere(cx: &mut TestAppContext) {
+    let (harness, mut cx) = harness(cx);
+    cx.update(|window, cx| harness.view.focus_handle(cx).focus(window, cx));
+    harness.sink.output(b"$ ");
+    harness.sink.exited(ExitReport::new(Some(0)));
+    cx.run_until_parked();
+
+    cx.simulate_keystrokes("l s enter ctrl-c");
+    cx.update(|_, cx| cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string("echo hi".into())));
+    harness.view
+           .update(&mut cx, |view, cx| view.paste_clipboard(cx));
+
+    assert!(harness.log.lock().written.is_empty(),
+            "nothing reached a finished program: {:?}",
+            harness.log.lock().written);
+    let screen = harness.view.read_with(&cx, |view, _| {
+                                 view.terminal().with_grid(|grid| grid.row_text(0))
+                             });
+    assert_eq!(screen, "$", "the screen stays to read");
+}
