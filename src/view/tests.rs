@@ -222,3 +222,52 @@ fn trackpad_pixels_add_up_to_whole_lines(cx: &mut TestAppContext) {
     swipe(&mut cx, -quarter);
     assert_eq!(display_offset(&harness, &mut cx), 2);
 }
+
+#[gpui_kit::test]
+fn after_the_program_exits_keys_and_pastes_go_nowhere(cx: &mut TestAppContext) {
+    let (harness, mut cx) = harness(cx);
+    cx.update(|window, cx| harness.view.focus_handle(cx).focus(window, cx));
+    harness.sink.output(b"$ ");
+    harness.sink.exited(ExitReport::new(Some(0)));
+    cx.run_until_parked();
+
+    cx.simulate_keystrokes("l s enter ctrl-c");
+    cx.update(|_, cx| cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string("echo hi".into())));
+    harness.view
+           .update(&mut cx, |view, cx| view.paste_clipboard(cx));
+
+    assert!(harness.log.lock().written.is_empty(),
+            "nothing reached a finished program: {:?}",
+            harness.log.lock().written);
+    let screen = harness.view.read_with(&cx, |view, _| {
+                                 view.terminal().with_grid(|grid| grid.row_text(0))
+                             });
+    assert_eq!(screen, "$", "the screen stays to read");
+}
+
+/// A program that exits with mouse reporting on gets no more mouse input:
+/// a click sends nothing (it selects instead), and the wheel scrolls the
+/// scrollback rather than reporting to a program that is gone.
+#[gpui_kit::test]
+fn after_exit_the_mouse_goes_to_the_view_not_the_program(cx: &mut TestAppContext) {
+    use gpui_kit::{Modifiers, point};
+    let (harness, mut cx) = harness(cx);
+    for line in 0..200 {
+        harness.sink.output(format!("line {line}\r\n").as_bytes());
+    }
+    // SGR mouse reporting on, then the program exits without turning it off.
+    harness.sink.output(b"\x1b[?1000h\x1b[?1006h");
+    harness.sink.exited(ExitReport::new(Some(0)));
+    cx.run_until_parked();
+    let live = top_row(&harness, &mut cx);
+
+    cx.simulate_click(point(px(40.), px(40.)), Modifiers::none());
+    wheel(&mut cx, 3.);
+
+    assert!(harness.log.lock().written.is_empty(),
+            "nothing reached the exited program: {:?}",
+            harness.log.lock().written);
+    assert_ne!(top_row(&harness, &mut cx),
+               live,
+               "the wheel scrolled the history instead");
+}
