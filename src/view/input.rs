@@ -2,8 +2,8 @@
 //! transport input or a grid change, and does nothing else.
 
 use gpui_kit::{
-    ClipboardItem, Context, KeyDownEvent, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
-    Point, ScrollDelta, ScrollWheelEvent, Window,
+    ClipboardItem, Context, KeyDownEvent, Keystroke, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    Pixels, Point, ScrollDelta, ScrollWheelEvent, Window,
 };
 
 use super::TerminalView;
@@ -30,6 +30,9 @@ impl<T: Transport> TerminalView<T> {
     /// Writes the system clipboard's text to the terminal, bracketed when the
     /// program asked for bracketed paste. See [`paste_payload`].
     pub fn paste_clipboard(&mut self, cx: &mut Context<Self>) {
+        if self.exited() {
+            return;
+        }
         let Some(text) = cx.read_from_clipboard().and_then(|item| item.text())
         else {
             return;
@@ -42,17 +45,18 @@ impl<T: Transport> TerminalView<T> {
         }
     }
 
-    /// The platform modifier's copy and paste chords are the view's; every
-    /// other platform chord belongs to the app and is left to propagate.
+    /// The copy and paste chords are the view's (see [`clipboard_chord`]);
+    /// every other platform chord belongs to the app and is left to
+    /// propagate. Once the program has exited, keys go nowhere.
     pub(super) fn on_key_down(&mut self, event: &KeyDownEvent, _window: &mut Window,
                               cx: &mut Context<Self>) {
         let keystroke = &event.keystroke;
-        if keystroke.modifiers.platform {
-            match keystroke.key.as_str() {
-                "c" => self.copy_selection(cx),
-                "v" => self.paste_clipboard(cx),
-                _ => {}
-            }
+        match clipboard_chord(keystroke, cfg!(target_os = "macos")) {
+            Some(Clipboard::Copy) => return self.copy_selection(cx),
+            Some(Clipboard::Paste) => return self.paste_clipboard(cx),
+            None => {}
+        }
+        if keystroke.modifiers.platform || self.exited() {
             return;
         }
         let input = KeyInput { key:      &keystroke.key,
@@ -124,7 +128,7 @@ impl<T: Transport> TerminalView<T> {
         if lines == 0. {
             return;
         }
-        if !self.terminal.with_grid(|grid| grid.sgr_mouse_mode()) {
+        if !self.mouse_reporting() {
             // Up the wheel is back into the scrollback.
             let rows = self.whole_lines(lines);
             if rows != 0
@@ -167,7 +171,7 @@ impl<T: Transport> TerminalView<T> {
         else {
             return;
         };
-        let sgr = self.terminal.with_grid(|grid| grid.sgr_mouse_mode());
+        let sgr = self.mouse_reporting();
         if !sgr {
             if button == MouseButton::Left && pressed {
                 self.terminal
@@ -186,6 +190,20 @@ impl<T: Transport> TerminalView<T> {
         }
     }
 
+    /// Whether mouse input goes to the program: it turned on SGR mouse
+    /// reporting and is still running. A program that exits with reporting
+    /// on leaves the mouse to the view - the wheel scrolls the scrollback
+    /// and a press selects - rather than to no one.
+    fn mouse_reporting(&self) -> bool {
+        self.terminal.with_grid(|grid| grid.sgr_mouse_mode()) && !self.exited()
+    }
+
+    /// Whether the program has exited: input has nowhere to go, though the
+    /// screen stays to read, select and copy.
+    fn exited(&self) -> bool {
+        self.terminal.exit_report().is_some()
+    }
+
     /// The cell under a window position, or `None` before the first frame
     /// has measured one.
     fn cell_at(&self, position: Point<Pixels>) -> Option<(usize, usize)> {
@@ -193,3 +211,31 @@ impl<T: Transport> TerminalView<T> {
         Some(metrics.cell_at(position - self.origin, self.terminal.size()))
     }
 }
+
+/// A clipboard chord the view handles itself rather than sending.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Clipboard {
+    Copy,
+    Paste,
+}
+
+/// Whether `keystroke` is the platform's copy or paste chord: the platform
+/// modifier with `c` or `v` (Cmd on macOS, Super elsewhere), and - off macOS,
+/// where Ctrl-C belongs to the program - Ctrl-Shift-C and Ctrl-Shift-V, as
+/// Linux terminals use.
+pub(super) fn clipboard_chord(keystroke: &Keystroke, macos: bool) -> Option<Clipboard> {
+    let modifiers = &keystroke.modifiers;
+    let chord =
+        modifiers.platform || (!macos && modifiers.control && modifiers.shift && !modifiers.alt);
+    if !chord {
+        return None;
+    }
+    match keystroke.key.to_ascii_lowercase().as_str() {
+        "c" => Some(Clipboard::Copy),
+        "v" => Some(Clipboard::Paste),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests;
