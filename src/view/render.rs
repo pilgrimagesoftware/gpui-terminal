@@ -44,7 +44,6 @@ impl<T: Transport> Render for TerminalView<T> {
              .on_mouse_up(MouseButton::Left, cx.listener(Self::on_left_up))
              .on_mouse_move(cx.listener(Self::on_mouse_move))
              .on_scroll_wheel(cx.listener(Self::on_scroll))
-             .on_key_down(cx.listener(Self::on_key_down))
              .child(fit)
              .children(rows)
     }
@@ -58,9 +57,10 @@ struct Span {
     flags:      Flags,
 }
 
-/// Every visible row, in `colors`.
+/// Every visible row, in `colors`, the cursor drawn only while its row is
+/// in view.
 fn rows(grid: &Grid, colors: &TerminalPalette) -> Vec<Div> {
-    let cursor = grid.cursor();
+    let cursor = grid.cursor_in_view();
     (0..grid.size().rows).map(|row| render_row(grid, row, cursor, colors))
                          .collect()
 }
@@ -91,7 +91,8 @@ pub(super) fn cell_colors(foreground: u32, background: u32, inverse: bool, curso
     (foreground, background)
 }
 
-fn render_row(grid: &Grid, row: usize, cursor: (usize, usize), colors: &TerminalPalette) -> Div {
+fn render_row(grid: &Grid, row: usize, cursor: Option<(usize, usize)>, colors: &TerminalPalette)
+              -> Div {
     let mut spans: Vec<Span> = Vec::new();
     for (column, cell) in grid.row_cells(row).enumerate() {
         // The second column of a wide character is a placeholder; the glyph
@@ -102,7 +103,7 @@ fn render_row(grid: &Grid, row: usize, cursor: (usize, usize), colors: &Terminal
         let (foreground, background) = cell_colors(palette::resolve(cell.fg, true, colors),
                                                    palette::resolve(cell.bg, false, colors),
                                                    cell.flags.contains(Flags::INVERSE),
-                                                   (column, row) == cursor,
+                                                   Some((column, row)) == cursor,
                                                    grid.is_selected(column, row),
                                                    colors);
         match spans.last_mut() {

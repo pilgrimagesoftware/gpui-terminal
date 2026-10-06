@@ -3,7 +3,8 @@
 use std::sync::Arc;
 
 use gpui_kit::{
-    App, Bounds, Context, EventEmitter, FocusHandle, Focusable, Pixels, Point, Task, Window,
+    App, Bounds, Context, EventEmitter, FocusHandle, Focusable, Pixels, Point, Subscription, Task,
+    Window,
 };
 
 use super::TerminalStyle;
@@ -17,18 +18,21 @@ use crate::{Result, Terminal, TerminalEvent, Transport};
 /// repaints itself when output arrives and sizes the terminal to whatever
 /// bounds it is laid out in; the host does neither.
 pub struct TerminalView<T> {
-    pub(super) terminal: Terminal<T>,
-    pub(super) focus:    FocusHandle,
-    pub(super) style:    TerminalStyle,
+    pub(super) terminal:         Terminal<T>,
+    pub(super) focus:            FocusHandle,
+    pub(super) style:            TerminalStyle,
     /// Measured for `style`, on the first render after it changed. Input
     /// handlers read it too, which is sound: an event only reaches the view
     /// after a frame has drawn it, and that frame measured.
-    pub(super) metrics:  Option<CellMetrics>,
+    pub(super) metrics:          Option<CellMetrics>,
     /// Where the grid's top-left corner was last laid out, in window
     /// coordinates, for turning a mouse position into a cell.
-    pub(super) origin:   Point<Pixels>,
-    exit_reported:       bool,
-    _pump:               Task<()>,
+    pub(super) origin:           Point<Pixels>,
+    /// Scrolling that hasn't yet added up to a whole line (see `on_scroll`).
+    pub(super) scroll_remainder: f32,
+    exit_reported:               bool,
+    _pump:                       Task<()>,
+    _keys:                       Subscription,
 }
 
 impl<T: Transport> TerminalView<T> {
@@ -43,13 +47,37 @@ impl<T: Transport> TerminalView<T> {
                              }
                          }
                      });
+        let focus = cx.focus_handle();
+        let keys = Self::take_keys(focus.clone(), cx);
         Self { terminal,
-               focus: cx.focus_handle(),
+               focus,
                style,
                metrics: None,
                origin: Point::default(),
+               scroll_remainder: 0.,
                exit_reported: false,
-               _pump: pump }
+               _pump: pump,
+               _keys: keys }
+    }
+
+    /// While the view has focus, its keystrokes come to it before the app's
+    /// key bindings do: GPUI matches bindings before it calls key-down
+    /// listeners, so a listener would lose Tab to a framework's focus
+    /// cycling, or Ctrl-C to a host's copy. A keystroke the view takes (see
+    /// `handle_key`) stops there; one it leaves - an app chord - goes on to
+    /// the bindings as usual.
+    fn take_keys(focus: FocusHandle, cx: &mut Context<Self>) -> Subscription {
+        let view = cx.weak_entity();
+        cx.intercept_keystrokes(move |event, window, cx| {
+              if !focus.is_focused(window) {
+                  return;
+              }
+              let taken = view.update(cx, |view, cx| view.handle_key(&event.keystroke, cx))
+                              .unwrap_or(false);
+              if taken {
+                  cx.stop_propagation();
+              }
+          })
     }
 
     pub fn terminal(&self) -> &Terminal<T> {

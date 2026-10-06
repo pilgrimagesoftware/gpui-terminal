@@ -145,3 +145,68 @@ fn clearing_a_selection_marks_the_grid_dirty_only_when_there_was_one() {
     grid.clear_selection();
     assert!(grid.take_dirty());
 }
+
+/// 30 numbered lines into a 5-row grid: the screen shows the last five, and
+/// the rest went into the scrollback.
+fn numbered(rows: usize) -> Grid {
+    let mut grid = grid(20, rows);
+    for line in 0..30 {
+        grid.feed(format!("line {line}\r\n").as_bytes());
+    }
+    grid
+}
+
+#[test]
+fn scrolling_back_shows_the_scrollback_and_scrolling_down_returns() {
+    let mut grid = numbered(5);
+    assert_eq!(grid.row_text(0), "line 26");
+    assert_eq!(grid.display_offset(), 0);
+
+    assert!(grid.scroll_display(10), "the view moved");
+    assert_eq!(grid.display_offset(), 10);
+    assert_eq!(grid.row_text(0), "line 16");
+    assert_eq!(grid.row_text(4), "line 20");
+    assert_eq!(grid.cursor_in_view(),
+               None,
+               "the cursor's row is out of sight");
+
+    assert!(grid.scroll_display(-4));
+    assert_eq!(grid.row_text(0), "line 20");
+
+    assert!(grid.scroll_to_bottom());
+    assert_eq!(grid.row_text(0), "line 26");
+    assert_eq!(grid.cursor_in_view(), Some((0, 4)));
+    assert!(!grid.scroll_to_bottom(), "already at the bottom");
+}
+
+#[test]
+fn scrolling_stops_at_either_end() {
+    let mut grid = numbered(5);
+    assert!(!grid.scroll_display(-3), "nothing below the live screen");
+    grid.scroll_display(1_000);
+    assert_eq!(grid.row_text(0),
+               "line 0",
+               "the oldest line, and no further");
+    assert!(!grid.scroll_display(1));
+}
+
+#[test]
+fn a_selection_made_scrolled_back_covers_what_was_shown() {
+    let mut grid = numbered(5);
+    grid.scroll_display(10);
+    grid.start_selection(0, 0);
+    grid.update_selection(6, 0);
+    assert!(grid.is_selected(3, 0));
+    assert_eq!(grid.selection_text().as_deref(), Some("line 16"));
+
+    grid.scroll_to_bottom();
+    assert!(!grid.is_selected(3, 0), "the selection stays on its rows");
+}
+
+#[test]
+fn the_alternate_screen_has_no_scrollback_to_scroll() {
+    let mut grid = numbered(5);
+    grid.feed(b"\x1b[?1049h\x1b[2J\x1b[Hfull screen");
+    assert!(!grid.scroll_display(5));
+    assert_eq!(grid.row_text(0), "full screen");
+}
