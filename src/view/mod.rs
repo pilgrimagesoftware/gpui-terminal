@@ -16,4 +16,4 @@ mod style;
 mod tests;
 
 pub use entity::TerminalView;
-pub use style::TerminalStyle;
+pub use style::{TerminalPalette, TerminalStyle};

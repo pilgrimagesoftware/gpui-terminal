@@ -43,6 +43,21 @@ fn open(cx: &mut gpui_kit::App) -> gpui_terminal::Result<()> {
 }
 ```
 
+### Colours
+
+`TerminalStyle::palette` sets the colours: the foreground and background, the
+sixteen ANSI colours, and optional cursor and selection backgrounds (without
+them, the cursor and selection swap the cell's colours). Each is `0xRRGGBB`;
+`TerminalPalette::rgb` converts a GPUI colour, so a host can map its theme:
+
+```rust,ignore
+let palette = TerminalPalette { foreground: TerminalPalette::rgb(theme.foreground),
+                                background: TerminalPalette::rgb(theme.background),
+                                selection: Some(TerminalPalette::rgb(theme.selection)),
+                                ..TerminalPalette::default() };
+let style = TerminalStyle::new("Menlo", gpui_kit::px(13.)).palette(palette);
+```
+
 ### Implementing `Transport`
 
 An embedder whose bytes come from somewhere other than a local PTY - a remote
