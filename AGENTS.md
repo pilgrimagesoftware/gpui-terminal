@@ -43,9 +43,10 @@ rustup toolchain install $(make -s print-rustfmt-nightly) --profile minimal --co
 ```
 
 CI (`.github/workflows/ci.yml`) runs fmt, clippy (both feature sets) and test
-(both feature sets, on macOS and Linux) on every push to `main` and every pull
-request. The `main` ruleset requires `fmt`, `clippy`, `test (macos-latest)` and
-`test (ubuntu-latest)` - renaming a job means updating the ruleset too.
+(both feature sets, on macOS and Linux) on every push to `master` or `develop`
+and every pull request. The `master` and `develop` rulesets both require
+`fmt`, `clippy`, `test (macos-latest)` and `test (ubuntu-latest)` - renaming a
+job means updating both rulesets too.
 
 ## Committing Code
 
@@ -61,14 +62,18 @@ build(deps): bump alacritty_terminal to 0.27
 
 ## Branches and Workflow
 
-- `main` is the only long-lived branch and is protected: changes land through
-  a PR with green CI and signed commits; no force-push, no deletion.
-- Branch as `feat/<change>`, `fix/<change>` or `chore/<change>`. Do the work
+- git-flow. `develop` is the integration branch and the default; `master` is
+  release-only. Both are protected: changes land through a PR with green CI
+  and signed commits; no force-push, no deletion.
+- Branch from `develop` as `feat/<change>`, `fix/<change>` or
+  `chore/<change>`, and PR back to `develop`. Only `release/x.y.z` and
+  `hotfix/x.y.z` PR to `master`. Never commit straight to either. Do the work
   in a `git worktree` in the peer directory `<checkout>-wt/<change>`, never in
   the primary checkout.
 - Merge with a merge commit or rebase, never squash - the Conventional Commit
   prefixes are the changelog's raw material.
-- Releases are signed tags on `main` after a version + changelog bump PR; see
+- Releases are signed tags on `master` after a `release/x.y.z` PR (version +
+  changelog bump), followed by a `master` -> `develop` merge-back; see
   `CONTRIBUTING.md` - Releases. Consumers then bump their `tag` pin.
 
 ## Conventions

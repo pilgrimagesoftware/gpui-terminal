@@ -21,4 +21,4 @@ coordinated disclosure date will be agreed with you.
 
 ## Supported versions
 
-The crate is pre-1.0. Only the latest tag on `main` receives security fixes.
+The crate is pre-1.0. Only the latest tag on `master` receives security fixes.

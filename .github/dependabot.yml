@@ -4,7 +4,7 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
-    target-branch: main
+    target-branch: develop
     open-pull-requests-limit: 10
     ignore:
       # Pinned exactly (`=0.7.0`) and bumped by hand in lockstep with every
@@ -21,7 +21,7 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
-    target-branch: main
+    target-branch: develop
     groups:
       actions:
         update-types:
