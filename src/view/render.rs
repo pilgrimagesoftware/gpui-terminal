@@ -44,7 +44,6 @@ impl<T: Transport> Render for TerminalView<T> {
              .on_mouse_up(MouseButton::Left, cx.listener(Self::on_left_up))
              .on_mouse_move(cx.listener(Self::on_mouse_move))
              .on_scroll_wheel(cx.listener(Self::on_scroll))
-             .on_key_down(cx.listener(Self::on_key_down))
              .child(fit)
              .children(rows)
     }

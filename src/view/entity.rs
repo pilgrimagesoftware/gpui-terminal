@@ -3,7 +3,8 @@
 use std::sync::Arc;
 
 use gpui_kit::{
-    App, Bounds, Context, EventEmitter, FocusHandle, Focusable, Pixels, Point, Task, Window,
+    App, Bounds, Context, EventEmitter, FocusHandle, Focusable, Pixels, Point, Subscription, Task,
+    Window,
 };
 
 use super::TerminalStyle;
@@ -29,6 +30,7 @@ pub struct TerminalView<T> {
     pub(super) origin:   Point<Pixels>,
     exit_reported:       bool,
     _pump:               Task<()>,
+    _keys:               Subscription,
 }
 
 impl<T: Transport> TerminalView<T> {
@@ -43,13 +45,36 @@ impl<T: Transport> TerminalView<T> {
                              }
                          }
                      });
+        let focus = cx.focus_handle();
+        let keys = Self::take_keys(focus.clone(), cx);
         Self { terminal,
-               focus: cx.focus_handle(),
+               focus,
                style,
                metrics: None,
                origin: Point::default(),
                exit_reported: false,
-               _pump: pump }
+               _pump: pump,
+               _keys: keys }
+    }
+
+    /// While the view has focus, its keystrokes come to it before the app's
+    /// key bindings do: GPUI matches bindings before it calls key-down
+    /// listeners, so a listener would lose Tab to a framework's focus
+    /// cycling, or Ctrl-C to a host's copy. A keystroke the view takes (see
+    /// `handle_key`) stops there; one it leaves - an app chord - goes on to
+    /// the bindings as usual.
+    fn take_keys(focus: FocusHandle, cx: &mut Context<Self>) -> Subscription {
+        let view = cx.weak_entity();
+        cx.intercept_keystrokes(move |event, window, cx| {
+              if !focus.is_focused(window) {
+                  return;
+              }
+              let taken = view.update(cx, |view, cx| view.handle_key(&event.keystroke, cx))
+                              .unwrap_or(false);
+              if taken {
+                  cx.stop_propagation();
+              }
+          })
     }
 
     pub fn terminal(&self) -> &Terminal<T> {

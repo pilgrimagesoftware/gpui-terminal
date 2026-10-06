@@ -2,8 +2,8 @@
 //! transport input or a grid change, and does nothing else.
 
 use gpui_kit::{
-    ClipboardItem, Context, KeyDownEvent, Keystroke, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    Pixels, Point, ScrollDelta, ScrollWheelEvent, Window,
+    ClipboardItem, Context, Keystroke, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
+    ScrollDelta, ScrollWheelEvent, Window,
 };
 
 use super::TerminalView;
@@ -44,28 +44,41 @@ impl<T: Transport> TerminalView<T> {
         }
     }
 
-    /// The copy and paste chords are the view's (see [`clipboard_chord`]);
-    /// every other platform chord belongs to the app and is left to
-    /// propagate. Once the program has exited, keys go nowhere.
-    pub(super) fn on_key_down(&mut self, event: &KeyDownEvent, _window: &mut Window,
-                              cx: &mut Context<Self>) {
-        let keystroke = &event.keystroke;
+    /// Handles a keystroke typed while the view has focus. Whether it was the
+    /// view's: the copy and paste chords (see [`clipboard_chord`]), and every
+    /// key the program can be sent. Every other platform chord belongs to the
+    /// app, and once the program has exited, so does every key.
+    ///
+    /// Runs ahead of the app's key bindings (see `TerminalView::new`), so a
+    /// binding on the focus path - a framework's Tab, a host's Ctrl-C copy -
+    /// can't take a key the program should get.
+    pub(super) fn handle_key(&mut self, keystroke: &Keystroke, cx: &mut Context<Self>) -> bool {
         match clipboard_chord(keystroke, cfg!(target_os = "macos")) {
-            Some(Clipboard::Copy) => return self.copy_selection(cx),
-            Some(Clipboard::Paste) => return self.paste_clipboard(cx),
+            Some(Clipboard::Copy) => {
+                self.copy_selection(cx);
+                return true;
+            }
+            Some(Clipboard::Paste) => {
+                self.paste_clipboard(cx);
+                return true;
+            }
             None => {}
         }
         if keystroke.modifiers.platform || self.exited() {
-            return;
+            return false;
         }
         let input = KeyInput { key:      &keystroke.key,
                                key_char: keystroke.key_char.as_deref(),
                                control:  keystroke.modifiers.control,
-                               alt:      keystroke.modifiers.alt, };
-        if let Some(bytes) = key_to_bytes(input) {
-            let written = self.terminal.write(&bytes);
-            self.report(written, cx);
-        }
+                               alt:      keystroke.modifiers.alt,
+                               shift:    keystroke.modifiers.shift, };
+        let Some(bytes) = key_to_bytes(input)
+        else {
+            return false;
+        };
+        let written = self.terminal.write(&bytes);
+        self.report(written, cx);
+        true
     }
 
     pub(super) fn on_left_down(&mut self, event: &MouseDownEvent, window: &mut Window,
