@@ -23,10 +23,10 @@ impl CellMetrics {
         let font_id = text_system.resolve_font(&font(style.font_family.clone()));
         let width = text_system.em_advance(font_id, style.font_size)
                                .map_or(FALLBACK_CELL_WIDTH, f32::from);
-        let height = text_system.ascent(font_id, style.font_size)
-                     + text_system.descent(font_id, style.font_size);
-        Self { width:  width.max(1.),
-               height: f32::from(height).max(1.), }
+        let height = line_height(f32::from(text_system.ascent(font_id, style.font_size)),
+                                 f32::from(text_system.descent(font_id, style.font_size)));
+        Self { width: width.max(1.),
+               height }
     }
 
     /// How many whole cells fit in `bounds` - at least one each way, so a
@@ -47,6 +47,18 @@ impl CellMetrics {
     pub(crate) fn pixels_to_lines(self, pixels: Pixels) -> f32 {
         f32::from(pixels) / self.height
     }
+}
+
+/// A row's height: the font's ascent and descent together, rounded up to a
+/// whole pixel, so a glyph's descender can't reach into the row below and
+/// rows don't drift apart over a tall grid.
+///
+/// The descent is taken by size. Platforms disagree on its sign: macOS's
+/// text system reports it negative (below the baseline), so adding it as
+/// given made every row shorter than its glyphs - lines overlapping, as if
+/// squashed together.
+pub(crate) fn line_height(ascent: f32, descent: f32) -> f32 {
+    (ascent + descent.abs()).ceil().max(1.)
 }
 
 /// How many whole cells fit in `length`; a negative length (a point left of
