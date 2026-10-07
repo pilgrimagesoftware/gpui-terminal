@@ -4,7 +4,7 @@
 [Knot](https://github.com/pilgrimagesoftware/Knot) and
 [Fernrohr](https://github.com/pilgrimagesoftware/Fernrohr). Both consume it as
 a git dependency pinned to a tag, so every change here reaches them through a
-release, never by tracking `main`.
+release, never by tracking a branch.
 
 ## Before you start
 
@@ -18,15 +18,19 @@ release, never by tracking `main`.
 
 ## Workflow
 
-`main` is the only long-lived branch.
+git-flow. `develop` is the integration branch and the default; `master` is
+release-only and only ever receives `release/*` and `hotfix/*` merges.
 
-1. Branch from `main`: `feat/<change>`, `fix/<change>`, `chore/<change>`.
+1. Branch from `develop`: `feat/<change>`, `fix/<change>`, `chore/<change>`.
 2. Keep commits scoped, conventional and signed (see below).
-3. Open a PR against `main`. CI (`.github/workflows/ci.yml`) must pass: `fmt`,
+3. Open a PR against `develop` (`release/*` and `hotfix/*` PR to `master`). CI (`.github/workflows/ci.yml`) must pass: `fmt`,
    `clippy`, and `test` on macOS and Linux, with the `pty` feature both on and
    off.
 4. PRs merge with a merge commit or rebase - never squash - so Conventional
-   Commit prefixes survive in history.
+   Commit prefixes survive in history. Delete a merged feature branch at merge
+   time (`gh pr merge --merge --delete-branch`). The repo's "Automatically
+   delete head branches" setting stays off: it deleted `master` when a
+   back-merge PR used it as the head branch.
 
 ## Running checks locally
 
@@ -75,13 +79,21 @@ Keep a Changelog format (Added / Changed / Fixed / Removed).
 
 ## Releases
 
-Consumers pin a tag, so a release is a tag:
+Consumers pin a tag, so a release is a signed tag on `master`:
 
-1. In a `chore/release-x.y.z` PR, bump `version` in `Cargo.toml` and move the
-   `[Unreleased]` entries in `CHANGELOG.md` under `## [x.y.z] - <date>`.
-2. After it merges, tag the merge commit on `main` with a signed tag:
+1. Branch `release/x.y.z` from `develop`. Bump `version` in `Cargo.toml` and
+   move the `[Unreleased]` entries in `CHANGELOG.md` under
+   `## [x.y.z] - <date>`. Open the PR against `master`.
+2. After it merges, tag the merge commit on `master`:
    `git tag -s vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`.
-3. Bump the `tag` in each consumer's `Cargo.toml` in its own PR.
+   The rulesets cover branches only, so tag pushes are not gated.
+3. Merge `master` back into `develop` through a PR, so the version bump and
+   changelog reach the integration branch. `master` is that PR's head branch:
+   merge it without `--delete-branch`.
+4. Bump the `tag` in each consumer's `Cargo.toml` in its own PR.
+
+A fix that cannot wait for `develop` goes on `hotfix/x.y.z` from `master`,
+PRs to `master`, and follows steps 2-4.
 
 Pre-1.0, a breaking API change bumps the minor version. The crate does not
 publish to crates.io.
