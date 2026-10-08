@@ -16,7 +16,7 @@ default = ["pty"]
 # A local pseudo-terminal transport. Off for an embedder whose bytes come from
 # somewhere else (a remote exec, a serial line) and that has no use for
 # `portable-pty` in its build.
-pty = ["dep:portable-pty"]
+pty = ["dep:portable-pty", "dep:libc"]
 
 [dependencies]
 alacritty_terminal = "0.26.0"
@@ -31,6 +31,11 @@ gpui-kit = { version = "=0.7.0", default-features = false }
 parking_lot = "0.12.5"
 portable-pty = { version = "0.9.0", optional = true }
 thiserror = "2.0.20"
+
+# Hanging up a PTY child's whole process group on teardown (`pty::hangup`).
+# Already in the lockfile through portable-pty; pinned to that same version.
+[target.'cfg(unix)'.dependencies]
+libc = { version = "0.2.190", optional = true }
 
 [dev-dependencies]
 # GPUI's headless test platform, to drive the view's pump, layout and input

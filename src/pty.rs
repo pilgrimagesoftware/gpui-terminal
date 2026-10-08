@@ -91,7 +91,10 @@ fn strip_host_terminal_env(command: &mut CommandBuilder) {
 
 /// A child process on a local pseudo-terminal.
 ///
-/// Dropping it kills the child.
+/// Dropping it, or [`Transport::terminate`], ends the child and everything it
+/// started: on unix its whole process group, and the terminal's foreground
+/// one, get SIGHUP, then SIGKILL if still there after a short grace
+/// (`pty::hangup`).
 pub struct PtyTransport {
     writer: Box<dyn Write + Send>,
     child:  Arc<Mutex<Box<dyn Child + Send + Sync>>>,
@@ -166,11 +169,50 @@ fn clamp_u16(value: usize) -> u16 {
     u16::try_from(value).unwrap_or(u16::MAX)
 }
 
+impl PtyTransport {
+    /// Ends the child and its descendants: on unix by process group
+    /// ([`hangup`]); elsewhere by killing the child.
+    #[cfg(unix)]
+    fn end(&mut self) -> Result<()> {
+        let mut groups = Vec::new();
+        // Only while it runs: once reaped, its PID may name somebody else.
+        let running = !self.exited.load(Ordering::Acquire);
+        let child_group = if running {
+            self.child
+                .lock()
+                .process_id()
+                .and_then(hangup::Group::of_process)
+        }
+        else {
+            None
+        };
+        groups.extend(child_group);
+        // The job in the foreground now - an interactive shell gives each its
+        // own group.
+        groups.extend(self.master
+                          .process_group_leader()
+                          .and_then(hangup::Group::new));
+        if child_group.is_none() && running {
+            // Not a group of its own to signal (it didn't `setsid`): at least
+            // hang up the child itself, as before.
+            self.child.lock().kill()?;
+        }
+        hangup::hang_up(groups)?;
+        Ok(())
+    }
+
+    #[cfg(not(unix))]
+    fn end(&mut self) -> Result<()> {
+        self.child.lock().kill()?;
+        Ok(())
+    }
+}
+
 impl Drop for PtyTransport {
     fn drop(&mut self) {
         // Best effort: a child that already exited cannot be killed again,
         // and there is no caller left to tell.
-        let _ = self.child.lock().kill();
+        let _ = self.end();
     }
 }
 
@@ -185,8 +227,7 @@ impl Transport for PtyTransport {
     }
 
     fn terminate(&mut self) -> Result<()> {
-        self.child.lock().kill()?;
-        Ok(())
+        self.end()
     }
 
     fn process_id(&self) -> Option<u32> {
@@ -197,5 +238,10 @@ impl Transport for PtyTransport {
     }
 }
 
+#[cfg(unix)]
+mod hangup;
+
+#[cfg(all(test, unix))]
+mod teardown_tests;
 #[cfg(test)]
 mod tests;
