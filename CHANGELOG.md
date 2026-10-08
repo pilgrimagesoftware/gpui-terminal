@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-08
+
+### Fixed
+
+- Ending a `PtyTransport` (`Transport::terminate`, or dropping it) left
+  behind any descendant that ignored SIGHUP: `portable-pty`'s kill hangs up
+  the child's PID only, and the kernel, when that session leader exits, only
+  the terminal's foreground group. On unix it now sends SIGHUP (then
+  SIGCONT) to the child's whole process group and the terminal's foreground
+  one, and SIGKILL to whatever is still there after 500 ms, from a
+  background thread so the caller doesn't wait. Never signals a group at or
+  below 1, or this process's own. Other platforms kill the child as before.
+
 ## [0.2.1] - 2026-10-06
 
 ### Fixed
