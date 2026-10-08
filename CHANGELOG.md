@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `PtyTransport::terminate`, dropping it, and `process_id` could block until
+  the child exited, so a child that didn't exit on its own hung them forever:
+  the reader thread held the child's lock across its blocking `wait`, and
+  teardown took that lock to find the child before signalling it. The reader
+  now owns the child outright; teardown kills through a `clone_killer` taken
+  at spawn, `process_id` answers from the PID read at spawn, and `wait` is
+  retried when a signal interrupts it.
+
 ## [0.2.2] - 2026-10-08
 
 ### Fixed

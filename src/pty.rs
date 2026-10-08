@@ -7,8 +7,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
-use parking_lot::Mutex;
-use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
+use portable_pty::{Child, ChildKiller, CommandBuilder, MasterPty, PtySize, native_pty_system};
 
 use crate::consts::{
     FALLBACK_SHELL, HOST_TERMINAL_ENV_NAMES, HOST_TERMINAL_ENV_PREFIXES, PTY_READ_BUFFER,
@@ -97,7 +96,12 @@ fn strip_host_terminal_env(command: &mut CommandBuilder) {
 /// (`pty::hangup`).
 pub struct PtyTransport {
     writer: Box<dyn Write + Send>,
-    child:  Arc<Mutex<Box<dyn Child + Send + Sync>>>,
+    /// Kills the child without touching it: the reader thread owns the
+    /// child, and is blocked in its `wait` for as long as the child runs, so
+    /// nothing that ends it may need the child itself.
+    killer: Box<dyn ChildKiller + Send + Sync>,
+    /// The child's PID, read once at spawn.
+    pid:    Option<u32>,
     master: Box<dyn MasterPty + Send>,
     /// Set once the reader thread has reaped the child.
     ///
@@ -120,28 +124,29 @@ impl PtyTransport {
         // `pair.slave` drops with `pair` at the end of this function. It has
         // to: the reader only sees end-of-file once every handle on the slave
         // side is closed, and the child's are the only ones that should be.
-        let child = Arc::new(Mutex::new(child));
+        let killer = child.clone_killer();
+        let pid = child.process_id();
         let reader = pair.master.try_clone_reader().map_err(Error::transport)?;
         let writer = pair.master.take_writer().map_err(Error::transport)?;
         let exited = Arc::new(AtomicBool::new(false));
         thread::Builder::new().name("gpui-terminal-pty".into())
                               .spawn({
-                                  let child = Arc::clone(&child);
                                   let exited = Arc::clone(&exited);
-                                  move || read_until_exit(reader, &child, &exited, &sink)
+                                  move || read_until_exit(reader, child, &exited, &sink)
                               })?;
         Ok(Self { writer,
-                  child,
+                  killer,
+                  pid,
                   master: pair.master,
                   exited })
     }
 }
 
 /// The reader thread: forward output until end-of-file, then reap the child
-/// and report how it ended.
-fn read_until_exit(mut reader: Box<dyn Read + Send>,
-                   child: &Mutex<Box<dyn Child + Send + Sync>>, exited: &AtomicBool,
-                   sink: &TerminalSink) {
+/// and report how it ended. It owns the child outright - no lock that
+/// teardown would wait on while `wait` blocks.
+fn read_until_exit(mut reader: Box<dyn Read + Send>, mut child: Box<dyn Child + Send + Sync>,
+                   exited: &AtomicBool, sink: &TerminalSink) {
     let mut buffer = [0_u8; PTY_READ_BUFFER];
     loop {
         match reader.read(&mut buffer) {
@@ -149,13 +154,22 @@ fn read_until_exit(mut reader: Box<dyn Read + Send>,
             Ok(size) => sink.output(&buffer[..size]),
         }
     }
-    let code = child.lock()
-                    .wait()
-                    .ok()
-                    .map(|status| status.exit_code() as i32);
+    let code = wait(&mut *child).ok()
+                                .map(|status| status.exit_code() as i32);
     // Before the report, so anything it wakes already sees no live process.
     exited.store(true, Ordering::Release);
     sink.exited(ExitReport::new(code));
+}
+
+/// `child.wait()`, retried when a signal interrupts it rather than reporting
+/// an exit that didn't happen.
+fn wait(child: &mut (dyn Child + Send + Sync)) -> std::io::Result<portable_pty::ExitStatus> {
+    loop {
+        match child.wait() {
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            result => return result,
+        }
+    }
 }
 
 fn pty_size(size: GridSize) -> PtySize {
@@ -178,10 +192,7 @@ impl PtyTransport {
         // Only while it runs: once reaped, its PID may name somebody else.
         let running = !self.exited.load(Ordering::Acquire);
         let child_group = if running {
-            self.child
-                .lock()
-                .process_id()
-                .and_then(hangup::Group::of_process)
+            self.pid.and_then(hangup::Group::of_process)
         }
         else {
             None
@@ -195,7 +206,7 @@ impl PtyTransport {
         if child_group.is_none() && running {
             // Not a group of its own to signal (it didn't `setsid`): at least
             // hang up the child itself, as before.
-            self.child.lock().kill()?;
+            self.killer.kill()?;
         }
         hangup::hang_up(groups)?;
         Ok(())
@@ -203,7 +214,7 @@ impl PtyTransport {
 
     #[cfg(not(unix))]
     fn end(&mut self) -> Result<()> {
-        self.child.lock().kill()?;
+        self.killer.kill()?;
         Ok(())
     }
 }
@@ -234,7 +245,7 @@ impl Transport for PtyTransport {
         if self.exited.load(Ordering::Acquire) {
             return None;
         }
-        self.child.lock().process_id()
+        self.pid
     }
 }
 
