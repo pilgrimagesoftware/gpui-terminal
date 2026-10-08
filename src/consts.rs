@@ -43,3 +43,12 @@ pub(crate) const HOST_TERMINAL_ENV_NAMES: &[&str] =
 /// is unset.
 #[cfg(feature = "pty")]
 pub(crate) const FALLBACK_SHELL: &str = "/bin/sh";
+
+/// How long a PTY child's process groups get to exit after the SIGHUP that
+/// ends them, before whatever is left gets SIGKILL (`pty::hangup`).
+#[cfg(all(feature = "pty", unix))]
+pub(crate) const PTY_KILL_GRACE: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// How often that wait checks whether they have.
+#[cfg(all(feature = "pty", unix))]
+pub(crate) const PTY_KILL_POLL: std::time::Duration = std::time::Duration::from_millis(20);

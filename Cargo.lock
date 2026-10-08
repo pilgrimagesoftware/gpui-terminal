@@ -2938,6 +2938,7 @@ dependencies = [
  "alacritty_terminal",
  "async-channel",
  "gpui-kit",
+ "libc",
  "parking_lot",
  "portable-pty",
  "tempfile",
