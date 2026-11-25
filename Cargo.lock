@@ -3150,7 +3150,7 @@ checksum = "f0de0aaa67d6974e0983f6d4ded918b73547db6cb82b61ac2de88576a45b0e81"
 
 [[package]]
 name = "gpui-terminal"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "alacritty_terminal",
  "async-channel",
