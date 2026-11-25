@@ -43,7 +43,7 @@ impl<T: Transport> Render for TerminalView<T> {
              .on_mouse_down(MouseButton::Left, cx.listener(Self::on_left_down))
              .on_mouse_up(MouseButton::Left, cx.listener(Self::on_left_up))
              .on_mouse_move(cx.listener(Self::on_mouse_move))
-             .on_scroll_wheel(cx.listener(Self::on_scroll))
+             .on_scroll(cx.listener(Self::on_scroll))
              .child(fit)
              .children(rows)
     }

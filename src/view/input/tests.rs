@@ -4,7 +4,7 @@ use gpui_kit::Keystroke;
 
 use super::{Clipboard, clipboard_chord};
 
-fn chord(keys: &str, macos: bool) -> Option<Clipboard> {
+fn chord(keys: &'static str, macos: bool) -> Option<Clipboard> {
     clipboard_chord(&Keystroke::parse(keys).expect("a valid keystroke"), macos)
 }
 
