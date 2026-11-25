@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** built against `gpui-kit` 0.11.0 (was 0.7.0), and so `gpui-pre` 0.3.14. An app must
+  use the same `gpui-kit` release, since two `gpui` versions in one build are incompatible. Scroll
+  input uses `ScrollEvent` / `on_scroll`, gpui's new names for `ScrollWheelEvent` / `on_scroll_wheel`.
+
 ### Fixed
 
 - `PtyTransport::terminate`, dropping it, and `process_id` could block until

@@ -115,10 +115,10 @@ fn typing_in_the_focused_view_writes_to_the_transport(cx: &mut TestAppContext) {
 
 /// Scrolls the wheel over the view, `lines` up (negative: down).
 fn wheel(cx: &mut VisualTestContext, lines: f32) {
-    use gpui_kit::{ScrollDelta, ScrollWheelEvent, point};
-    cx.simulate_event(ScrollWheelEvent { position: point(px(40.), px(40.)),
-                                         delta: ScrollDelta::Lines(point(0., lines)),
-                                         ..Default::default() });
+    use gpui_kit::{ScrollDelta, ScrollEvent, point};
+    cx.simulate_event(ScrollEvent { position: point(px(40.), px(40.)),
+                                    delta: ScrollDelta::Lines(point(0., lines)),
+                                    ..Default::default() });
     cx.run_until_parked();
 }
 
@@ -170,10 +170,10 @@ fn a_mouse_aware_program_gets_the_wheel_instead(cx: &mut TestAppContext) {
 
 /// Scrolls a trackpad's `pixels` over the view, up (negative: down).
 fn swipe(cx: &mut VisualTestContext, pixels: f32) {
-    use gpui_kit::{ScrollDelta, ScrollWheelEvent, point};
-    cx.simulate_event(ScrollWheelEvent { position: point(px(40.), px(40.)),
-                                         delta: ScrollDelta::Pixels(point(px(0.), px(pixels))),
-                                         ..Default::default() });
+    use gpui_kit::{ScrollDelta, ScrollEvent, point};
+    cx.simulate_event(ScrollEvent { position: point(px(40.), px(40.)),
+                                    delta: ScrollDelta::Pixels(point(px(0.), px(pixels))),
+                                    ..Default::default() });
     cx.run_until_parked();
 }
 
