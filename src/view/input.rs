@@ -3,7 +3,7 @@
 
 use gpui_kit::{
     ClipboardItem, Context, Keystroke, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
-    ScrollDelta, ScrollWheelEvent, Window,
+    ScrollDelta, ScrollEvent, Window,
 };
 
 use super::TerminalView;
@@ -128,7 +128,7 @@ impl<T: Transport> TerminalView<T> {
     /// A mouse-aware program gets one wheel report per scroll event, in the
     /// direction scrolled. Otherwise the wheel scrolls the view through the
     /// scrollback, by the lines scrolled - see [`Self::whole_lines`].
-    pub(super) fn on_scroll(&mut self, event: &ScrollWheelEvent, _window: &mut Window,
+    pub(super) fn on_scroll(&mut self, event: &ScrollEvent, _window: &mut Window,
                             cx: &mut Context<Self>) {
         let Some(metrics) = self.metrics
         else {
